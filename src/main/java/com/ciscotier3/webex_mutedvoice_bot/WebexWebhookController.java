@@ -3,6 +3,7 @@ package com.ciscotier3.webex_mutedvoice_bot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,9 @@ import org.springframework.web.bind.annotation.*;
 import java.net.*;
 import java.net.http.*;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 public class WebexWebhookController {
@@ -64,6 +68,46 @@ public class WebexWebhookController {
             System.err.println("Error during bot init: " + e.getMessage());
         }
     }
+    
+    public List<String> extractPersonIds(List<Map<String, Object>> items) {
+        List<String> personIds = new ArrayList<>();
+        for (Map<String, Object> member : items) {
+            String personId = (String) member.get("personId");
+            personIds.add(personId);
+        }
+        return personIds;
+    }
+    
+    private boolean isUserBelogsToAnnonymusGroup(String roomId, String MessagingPersonId) {
+    	
+    	String url = "https://webexapis.com/v1/memberships?roomId=" + roomId;
+    	try {
+    	 HttpRequest msgRequest = HttpRequest.newBuilder()
+                 .uri(URI.create(url))
+                 .header("Authorization", "Bearer " + botAccessToken)
+                 .GET()
+                 .build();
+
+         HttpResponse<String> msgResponse = httpClient.send(msgRequest, HttpResponse.BodyHandlers.ofString());
+         ObjectMapper mapper = new ObjectMapper();
+
+         // Parse JSON
+         Map<String, Object> json = mapper.readValue(msgResponse.body(), new TypeReference<>() {});
+         List<Map<String, Object>> items = (List<Map<String, Object>>) json.get("items");
+
+         // Extract personIds
+         for (Map<String, Object> item : items) {
+             String personId = (String) item.get("personId");
+             if(personId.equals(MessagingPersonId) ) {
+            	 return true;
+             }
+         }
+    	}
+    	catch(Exception ex) {
+    		return false;
+    	}
+    	return false;
+    }
 
     @PostMapping("/webex-webhook")
     public ResponseEntity<String> handleWebhook(@RequestBody JsonNode payload) {
@@ -82,7 +126,14 @@ public class WebexWebhookController {
                     System.out.println("Ignoring message sent by self.");
                     return ResponseEntity.ok("Ignored self message.");
                 }
-
+                
+                System.out.println("botPersonId : "+botPersonId +";personId : "+personId);
+               
+                if(!isUserBelogsToAnnonymusGroup(targetGroupSpaceId, personId)){
+                	System.out.println("Ignoring message sent by outsider.");
+                    return ResponseEntity.ok("Ignoring message sent by outsider.");
+                }
+                
                 HttpRequest msgRequest = HttpRequest.newBuilder()
                         .uri(URI.create("https://webexapis.com/v1/messages/" + messageId))
                         .header("Authorization", "Bearer " + botAccessToken)
