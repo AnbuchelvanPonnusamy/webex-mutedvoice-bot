@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: webex-mutedvoice-bot
-    runtime: java
-    buildCommand: "./mvnw clean package -DskipTests"
-    startCommand: "java -jar target/webex-mutedvoice-bot-0.0.1-SNAPSHOT.jar"
-    branch: main
-    region: oregon
-    plan: free
